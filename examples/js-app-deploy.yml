@@ -41,15 +41,29 @@ objects:
         creationTimestamp:
         labels:
           name: "${NAME}"
+
       spec:
         containers:
         - image: "docker-registry.default.svc:5000/${NAMESPACE}/${NAME}:${APP_TAG}"
+          
           imagePullPolicy: Always
           name: "${NAME}"
+          env:
+            - name: server.port
+              value: "{{ .Values.env.port }}"
+          envFrom:
+          - configMapRef:
+            name: special-config
           ports:
           - containerPort: 8080
             protocol: TCP
-          resources: {}
+          resources:
+            limits:
+              cpu: 4
+              memory: 6Gi
+            requests:
+              cpu: 2
+              memory: 4Gi
           terminationMessagePath: "/dev/termination-log"
           readinessProbe:
             httpGet:

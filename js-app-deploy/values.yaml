@@ -1,0 +1,46 @@
+configs: {}
+controller:
+  enabled: true
+  type: deployment
+env:
+- name: server.port
+  value: '{{ .Values.env.port }}'
+hpa:
+  enabled: true
+  maxreplicas: 2
+  targetcpuutilizationpercentage: 80
+image:
+  name: ${NAME}
+  pullPolicy: Always
+  repository: ' '
+  tag: ' '
+pdb:
+  enabled: true
+  minavailable: 1
+probes:
+  readiness:
+    httpGet:
+      path: /
+      port: 8080
+    initialDelaySeconds: 10
+    timeoutSeconds: 1
+replicas:
+  max: 1
+  min: 1
+resources:
+  limits:
+    cpu: "4"
+    memory: 6Gi
+  requests:
+    cpu: "2"
+    memory: 4Gi
+route:
+  enabled: true
+  termination:
+    termination: ""
+service:
+  enabled: true
+  ports:
+  - "8080"
+  type: ClusterIP
+volumeMounts: {}

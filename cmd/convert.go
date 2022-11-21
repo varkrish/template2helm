@@ -9,10 +9,17 @@ import (
 	"path/filepath"
 	"strings"
 
+	dcconvert "github.com/csfreak/dc2deploy/pkg/convert"
+	appsv1 "github.com/openshift/api/apps/v1"
+	route "github.com/openshift/api/route/v1"
 	template "github.com/openshift/api/template/v1"
 	"github.com/spf13/cobra"
+	core "k8s.io/api/core/v1"
+
+	//"github.com/spf13/cobra"
 	"helm.sh/helm/v3/pkg/chart"
 	"helm.sh/helm/v3/pkg/chartutil"
+	v1 "k8s.io/api/apps/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/yaml"
@@ -36,7 +43,6 @@ var (
 		RunE: func(cmd *cobra.Command, args []string) error {
 
 			var myTemplate template.Template
-
 			yamlFile, err := ioutil.ReadFile(filepath.Clean(tplPath))
 			if err != nil {
 				return fmt.Errorf("Couldn't load template: %v", err)
@@ -51,29 +57,37 @@ var (
 
 			// Convert myTemplate.Objects into individual files
 			var templates []*chart.File
-			err = objectToTemplate(&myTemplate.Objects, &myTemplate.ObjectLabels, &templates)
-			checkErr(err, "Failed object to template conversion")
-
-			// Convert myTemplate.Parameters into a yaml string map
 			values := make(map[string]interface{})
+			var vals Values
+			objectToTemplate(&myTemplate.Objects, &myTemplate.ObjectLabels, &templates, &vals)
+			checkErr(err, "Failed object to template conversion")
+			// Convert myTemplate.Parameters into a yaml string map
 			err = paramsToValues(&myTemplate.Parameters, &values, &templates)
 			checkErr(err, "Failed parameter to value conversion")
-
-			valuesAsByte, err := yaml.Marshal(values)
+			valuesAsByte, err := yaml.Marshal(vals)
+			fmt.Println(string(valuesAsByte))
 			checkErr(err, "Failed converting values to YAML")
-
+			/* In our case, we  need to create the values.yaml, chart.yaml nad basic deployer*/
+			var dependency chart.Dependency
+			dependency = chart.Dependency{
+				Name:       "app-helm-common",
+				Version:    ">=1.0.0",
+				Repository: "",
+			}
 			myChart := chart.Chart{
 				Metadata: &chart.Metadata{
 					Name:        myTemplate.ObjectMeta.Name,
 					Version:     "v0.0.1",
 					Description: myTemplate.ObjectMeta.Annotations["description"],
 					Tags:        myTemplate.ObjectMeta.Annotations["tags"],
+					Type:        "application",
+					APIVersion:  "v2",
 				},
 				Templates: templates,
 				Values:    values,
-				Raw:       []*chart.File{{ Name: "values.yaml", Data: []byte(valuesAsByte) }},
+				Raw:       []*chart.File{{Name: "values.yaml", Data: []byte(valuesAsByte)}},
 			}
-
+			myChart.Metadata.Dependencies = append(myChart.Metadata.Dependencies, &dependency)
 			if myChart.Metadata.Name == "" {
 				ext := filepath.Ext(tplPath)
 				name := filepath.Base(string(tplPath))[0 : len(filepath.Base(string(tplPath)))-len(ext)]
@@ -103,11 +117,22 @@ func checkErr(err error, msg string) {
 }
 
 // Convert the object list in the openshift template to a set of template files in the chart
-func objectToTemplate(objects *[]runtime.RawExtension, templateLabels *map[string]string, templates *[]*chart.File) error {
+func objectToTemplate(objects *[]runtime.RawExtension, templateLabels *map[string]string, templates *[]*chart.File,
+	values *Values) error {
 	o := *objects
 
 	m := make(map[string][]byte)
-	seperator := []byte{'-', '-','-','\n'}
+	seperator := []byte{'-', '-', '-', '\n'}
+	vals := *values
+
+	vals.Hpa.Enabled = true
+	vals.Hpa.Maxreplicas = 2
+	vals.Hpa.Targetcpuutilizationpercentage = 80
+	vals.Image.Repository = string(" ")
+	vals.Image.Tag = string(" ")
+	vals.Image.Namespace = ""
+	vals.Pdb.Enabled = true
+	vals.Pdb.Minavailable = 1
 
 	for _, v := range o {
 		var k8sR unstructured.Unstructured
@@ -125,40 +150,112 @@ func objectToTemplate(objects *[]runtime.RawExtension, templateLabels *map[strin
 			}
 			k8sR.SetLabels(labels)
 		}
-
 		updatedJSON, err := k8sR.MarshalJSON()
 		if err != nil {
 			return fmt.Errorf(fmt.Sprintf("Failed to marshal Unstructured record to JSON\n%v\n", k8sR) + err.Error())
 		}
-
 		log.Printf("Creating a template for object %s", k8sR.GetKind())
-		data, err := yaml.JSONToYAML(updatedJSON)
-		if err != nil {
-			return fmt.Errorf(fmt.Sprintf("Failed to marshal Raw resource back to YAML\n%v\n", updatedJSON) + err.Error())
+		var data []byte
+		var errh error
+		data, errh = yaml.JSONToYAML(updatedJSON)
+		if errh != nil {
+			return fmt.Errorf(fmt.Sprintf("Failed to marshal Raw resource back to YAML\n%v\n", updatedJSON) + errh.Error())
+		}
+		//var consolidatedEnv []byte
+		var deploy = &v1.Deployment{}
+		if k8sR.GetKind() == "DeploymentConfig" {
+			dc := &appsv1.DeploymentConfig{}
+			fmt.Printf("Converting DC to Deployment\n")
+			errh = json.Unmarshal(updatedJSON, &dc)
+			checkErr(err, "Unable to marshal template")
+			deploy, errh = dcconvert.ToDeploy(dc)
+			if err != nil {
+				return fmt.Errorf("unable to convert to deploy: %w", err)
+			}
+
+			fmt.Printf("Successfully converted DC to Deployment\n")
+
+			k8sR.SetKind(deploy.Kind)
 		}
 
-		if m[k8sR.GetKind()] == nil  {
+		if k8sR.GetKind() == "Deployment" {
+			vals.Env = deploy.Spec.Template.Spec.Containers[0].Env
+			vals.Resources = deploy.Spec.Template.Spec.Containers[0].Resources
+			if deploy.Spec.Template.Spec.Containers[0].ReadinessProbe != nil {
+				vals.Probes.Readiness = deploy.Spec.Template.Spec.Containers[0].ReadinessProbe
+			}
+			if deploy.Spec.Template.Spec.Containers[0].LivenessProbe != nil {
+				vals.Probes.Liveness = deploy.Spec.Template.Spec.Containers[0].LivenessProbe
+			}
+			vals.Image.PullPolicy = deploy.Spec.Template.Spec.Containers[0].ImagePullPolicy
+			vals.Image.Name = deploy.ObjectMeta.Name
+			vals.Controller.Enabled = true
+			vals.Controller.Type = "deployment"
+			vals.Replicas.Min = *deploy.Spec.Replicas
+			vals.Replicas.Max = *deploy.Spec.Replicas
+
+			vals.Configs.Secrets = make([]string, 0)
+			vals.Configs.Configmaps = make([]string, 0)
+
+			for _, envFrom := range deploy.Spec.Template.Spec.Containers[0].EnvFrom {
+
+				if envFrom.SecretRef != nil && envFrom.SecretRef.Name != "" {
+					vals.Configs.Secrets = append(vals.Configs.Secrets, envFrom.SecretRef.Name)
+				}
+				if envFrom.ConfigMapRef != nil && envFrom.ConfigMapRef.Name != "" {
+					vals.Configs.Configmaps = append(vals.Configs.Configmaps, envFrom.ConfigMapRef.Name)
+				}
+			}
+		}
+		log.Println("configs %v", vals.Configs)
+		/* Generating volumes */
+
+		//	vals.VolumeSpec.Mounts
+
+		if k8sR.GetKind() == "Service" {
+			var svc = &core.Service{}
+			log.Println("Converting yaml to Service")
+			errh = json.Unmarshal(updatedJSON, &svc)
+			checkErr(err, "Unable to marshal template")
+			log.Println("Converted  yaml to Service")
+			vals.Service.Annotations = svc.Annotations
+			vals.Service.Enabled = true
+			vals.Service.Svc_type = string(svc.Spec.Type)
+			vals.Service.Ports = make([]string, len(svc.Spec.Ports))
+			for i, v := range svc.Spec.Ports {
+				vals.Service.Ports[i] = fmt.Sprint(v.Port)
+			}
+		}
+		if k8sR.GetKind() == "Route" {
+			var route = route.Route{}
+			log.Println("Converting yaml to Service")
+			errh = json.Unmarshal(updatedJSON, &route)
+			checkErr(err, "Unable to marshal template")
+			log.Println("Converted  yaml to Service")
+			vals.Route.Annotations = route.Annotations
+			vals.Route.Enabled = true
+			vals.Route.Hostname = route.Spec.Host
+		}
+
+		if m[k8sR.GetKind()] == nil {
 			m[k8sR.GetKind()] = data
 
 		} else {
-			newdata:=append(m[k8sR.GetKind()],seperator...)
-			data=append(newdata,data...)
+			newdata := append(m[k8sR.GetKind()], seperator...)
+			data = append(newdata, data...)
 			m[k8sR.GetKind()] = data
 		}
 	}
-
-    // Create chart using map
+	// Create chart using map
 	for k, v := range m {
-
 		name := "templates/" + strings.ToLower(k+".yaml")
-
 		tf := chart.File{
 			Name: name,
 			Data: v,
 		}
 		*templates = append(*templates, &tf)
 	}
-
+	*values = vals
 	return nil
 }
 
@@ -167,7 +264,6 @@ func paramsToValues(param *[]template.Parameter, values *map[string]interface{},
 	p := *param
 	t := *templates
 	v := *values
-
 	for _, pm := range p {
 		name := strings.ToLower(pm.Name)
 		log.Printf("Convert parameter %s to value .%s", pm.Name, name)

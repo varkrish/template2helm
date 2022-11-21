@@ -1,0 +1,14 @@
+apiVersion: authorization.openshift.io/v1
+kind: RoleBinding
+metadata:
+  labels:
+    template: js-app-deploy-template
+  name: edit
+roleRef:
+  name: edit
+subjects:
+- kind: ServiceAccount
+  name: jenkins
+  namespace: {{ .Values.pipelines_namespace }}
+userNames:
+- system:serviceaccount:{{ .Values.pipelines_namespace }}:{{ .Values.deployer_user }}
