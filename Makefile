@@ -1,7 +1,7 @@
 LAST_TAG := $(shell git describe --abbrev=0 --tags 2>/dev/null || git rev-parse --short HEAD)
 
 USER := varkrish
-EXECUTABLE := template2helm
+EXECUTABLE := t2hc
 
 # only include the amd64 binaries, otherwise the github release will become
 # too big

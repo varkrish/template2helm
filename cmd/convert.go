@@ -65,7 +65,6 @@ var (
 			err = paramsToValues(&myTemplate.Parameters, &values, &templates)
 			checkErr(err, "Failed parameter to value conversion")
 			valuesAsByte, err := yaml.Marshal(vals)
-			fmt.Println(string(valuesAsByte))
 			checkErr(err, "Failed converting values to YAML")
 			/* In our case, we  need to create the values.yaml, chart.yaml nad basic deployer*/
 			var dependency chart.Dependency
@@ -79,9 +78,9 @@ var (
 					Name:        myTemplate.ObjectMeta.Name,
 					Version:     "v0.0.1",
 					Description: myTemplate.ObjectMeta.Annotations["description"],
-					Tags:        myTemplate.ObjectMeta.Annotations["tags"],
-					Type:        "application",
-					APIVersion:  "v2",
+					//Tags:        myTemplate.ObjectMeta.Annotations["tags"],
+					Type:       "application",
+					APIVersion: "v2",
 				},
 				Templates: templates,
 				Values:    values,
@@ -156,10 +155,6 @@ func getVolumeVal(container *core.Container, values *Values, volumes *[]core.Vol
 		vals.VolumeSpec.Mounts = append(vals.VolumeSpec.Mounts, mount)
 	}
 	*values = vals
-	//Now we need to normalize the names
-	//newdata := append(m[k8sR.GetKind()], seperator...)
-	//data = append(newdata, data...)
-	//m[k8sR.GetKind()] = data
 	return nil
 }
 
@@ -180,6 +175,11 @@ func objectToTemplate(objects *[]runtime.RawExtension, templateLabels *map[strin
 	vals.Image.Namespace = ""
 	vals.Pdb.Enabled = true
 	vals.Pdb.Minavailable = 1
+	vals.Strategy.Ttype = "RollingUpdate"
+	vals.Strategy.MaxSurge = "100%"
+	vals.Strategy.MaxUnavailable = "25%"
+	vals.ServiceAccountOptions.Create = true
+	vals.ServiceAccountOptions.Name = ""
 
 	for _, v := range o {
 		var k8sR unstructured.Unstructured
@@ -284,24 +284,36 @@ func objectToTemplate(objects *[]runtime.RawExtension, templateLabels *map[strin
 			vals.Route.Enabled = true
 			vals.Route.Hostname = route.Spec.Host
 		}
+		if k8sR.GetKind() != "Deployment" &&
+			k8sR.GetKind() != "Job" &&
+			k8sR.GetKind() != "CronJob" &&
+			k8sR.GetKind() != "ImageStream" &&
+			k8sR.GetKind() != "Route" &&
+			k8sR.GetKind() != "Service" {
+			if m[k8sR.GetKind()] == nil {
+				m[k8sR.GetKind()] = data
 
-		if m[k8sR.GetKind()] == nil {
-			m[k8sR.GetKind()] = data
-
-		} else {
-			newdata := append(m[k8sR.GetKind()], seperator...)
-			data = append(newdata, data...)
-			m[k8sR.GetKind()] = data
+			} else {
+				newdata := append(m[k8sR.GetKind()], seperator...)
+				data = append(newdata, data...)
+				m[k8sR.GetKind()] = data
+			}
 		}
 	}
-	// Create chart using map
+	//Create chart using map
 	for k, v := range m {
-		name := "templates/" + strings.ToLower(k+".yaml")
-		tf := chart.File{
-			Name: name,
-			Data: v,
+		fmt.Printf("----%s----", k)
+		fmt.Print(k != "Deployment")
+
+		if (k != "Deployment") && (k != "Job") &&
+			(k != "CronJob") {
+			name := "templates/" + strings.ToLower(k+".yaml")
+			tf := chart.File{
+				Name: name,
+				Data: v,
+			}
+			*templates = append(*templates, &tf)
 		}
-		*templates = append(*templates, &tf)
 	}
 	*values = vals
 	return nil
@@ -312,6 +324,7 @@ func paramsToValues(param *[]template.Parameter, values *map[string]interface{},
 	p := *param
 	t := *templates
 	v := *values
+
 	for _, pm := range p {
 		name := strings.ToLower(pm.Name)
 		log.Printf("Convert parameter %s to value .%s", pm.Name, name)
@@ -337,7 +350,11 @@ func paramsToValues(param *[]template.Parameter, values *map[string]interface{},
 			v[name] = "# TODO: must define a default value for ." + name
 		}
 	}
-
+	ntf := chart.File{
+		Name: "templates/basic_deployment.yaml",
+		Data: []byte("{{- include \"common.appSpec\" . -}}"),
+	}
+	t = append(t, &ntf)
 	*templates = t
 	*values = v
 

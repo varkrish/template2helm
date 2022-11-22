@@ -98,18 +98,31 @@ type ImageSpec struct {
 	Tag        string          `json:"tag,omitempty"`
 	PullPolicy core.PullPolicy `json:"pullPolicy,omitempty"`
 }
+type SAOpts struct {
+	Create      bool              `json:"create,omitempty"`
+	Annotations map[string]string `json:"annotations,omitempty"`
+	Name        string            `json:"name,omitempty"`
+}
+
+type Strategy struct {
+	Ttype          string `json:"type,omitempty"`
+	MaxSurge       string `json:"maxSurge,omitempty"`
+	MaxUnavailable string `json:"maxUnavailable,omitempty"`
+}
 type Values struct {
-	Replicacount int                       `json:"replicacount,omitempty"`
-	Env          []core.EnvVar             `json:"env,omitempty"`
-	Image        ImageSpec                 `json:"image,omitempty"`
-	Service      Service                   `json:"service,omitempty"`
-	Resources    core.ResourceRequirements `json:"resources,omitempty"`
-	Probes       probes                    `json:"probes,omitempty"`
-	Controller   Controller                `json:"controller,omitempty"`
-	Route        Route                     `json:"route,omitempty"`
-	VolumeSpec   VolumeSpec                `json:"volumeMounts,omitempty"`
-	Replicas     Replicas                  `json:"replicas,omitempty"`
-	Configs      Configs                   `json:"configs,omitempty"`
-	Hpa          Hpa                       `json:"hpa,omitempty"`
-	Pdb          Pdb                       `json:"pdb,omitempty"`
+	Replicacount          int                       `json:"replicacount,omitempty"`
+	Env                   []core.EnvVar             `json:"env,omitempty"`
+	Image                 ImageSpec                 `json:"image,omitempty"`
+	Service               Service                   `json:"service,omitempty"`
+	ServiceAccountOptions SAOpts                    `json:"serviceAccount,omitempty"`
+	Resources             core.ResourceRequirements `json:"resources,omitempty"`
+	Probes                probes                    `json:"probes,omitempty"`
+	Controller            Controller                `json:"controller,omitempty"`
+	Strategy              Strategy                  `json:"strategy,omitempty"`
+	Route                 Route                     `json:"route,omitempty"`
+	VolumeSpec            VolumeSpec                `json:"volumeMounts,omitempty"`
+	Replicas              Replicas                  `json:"replicas,omitempty"`
+	Configs               Configs                   `json:"configs,omitempty"`
+	Hpa                   Hpa                       `json:"hpa,omitempty"`
+	Pdb                   Pdb                       `json:"pdb,omitempty"`
 }
