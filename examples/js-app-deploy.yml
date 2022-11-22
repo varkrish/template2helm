@@ -16,8 +16,8 @@ objects:
       build: "${NAME}"
     name: "${NAME}"
   spec: {}
-- apiVersion: apps.openshift.io/v1
-  kind: DeploymentConfig
+- apiVersion: v1
+  kind: Deployment
   metadata:
     name: "${NAME}"
     labels:

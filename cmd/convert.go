@@ -226,6 +226,7 @@ func objectToTemplate(objects *[]runtime.RawExtension, templateLabels *map[strin
 		}
 
 		if k8sR.GetKind() == "Deployment" {
+			errh = json.Unmarshal(updatedJSON, &deploy)
 			vals.Env = deploy.Spec.Template.Spec.Containers[0].Env
 			vals.Resources = deploy.Spec.Template.Spec.Containers[0].Resources
 			if deploy.Spec.Template.Spec.Containers[0].ReadinessProbe != nil {
