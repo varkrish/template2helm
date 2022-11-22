@@ -43,9 +43,18 @@ objects:
           name: "${NAME}"
 
       spec:
+        volumes:
+        - name: config-volume
+          configMap:
+            name: special-config
+        - name: secret-volume
+          secret:
+            secretName: special-secret
+        - name: task-pv-storage
+          persistentVolumeClaim:
+            claimName: task-pv-claim
         containers:
         - image: "docker-registry.default.svc:5000/${NAMESPACE}/${NAME}:${APP_TAG}"
-          
           imagePullPolicy: Always
           name: "${NAME}"
           env:
@@ -54,6 +63,13 @@ objects:
           envFrom:
           - configMapRef:
             name: special-config
+          volumeMounts:
+           - mountPath: "/usr/share/nginx/html"
+             name: task-pv-storage
+           - name: config-volume
+             mountPath: /etc/config
+           - name: secret-volume
+             mountPath: /etc/secret
           ports:
           - containerPort: 8080
             protocol: TCP

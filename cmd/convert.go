@@ -116,6 +116,53 @@ func checkErr(err error, msg string) {
 	return
 }
 
+func getVolumeVal(container *core.Container, values *Values, volumes *[]core.Volume) error {
+
+	vals := *values
+	oVolumes := *volumes
+	volumeVals := make(map[string]Mount)
+	oContainer := *container
+	mount := Mount{}
+	vals.VolumeSpec.Enabled = len(oVolumes) > 0
+	if len(oVolumes) == 0 {
+		return nil
+	}
+	for _, v := range oVolumes {
+		if (v.ConfigMap != nil) && (v.ConfigMap.Name != "") {
+			mount.Name = v.ConfigMap.Name
+			mount.Ttype = "configmap"
+			for _, k := range v.ConfigMap.Items {
+				mount.Keys = append(mount.Keys, k.Key)
+			}
+		} else if (v.Secret != nil) && (v.Secret.SecretName != "") {
+			mount.Name = v.Secret.SecretName
+			mount.Ttype = "secret"
+			for _, k := range v.Secret.Items {
+				mount.Keys = append(mount.Keys, k.Key)
+			}
+		} else if (v.PersistentVolumeClaim != nil) && (v.PersistentVolumeClaim.ClaimName != "") {
+			mount.Ttype = "pvc"
+			mount.Name = v.PersistentVolumeClaim.ClaimName
+		} else {
+			log.Println("Volume specification %s is not supported", v.Name)
+		}
+		volumeVals[v.Name] = mount
+	}
+
+	for _, vMounts := range oContainer.VolumeMounts {
+
+		mount = volumeVals[vMounts.Name]
+		mount.MountPath = vMounts.MountPath
+		vals.VolumeSpec.Mounts = append(vals.VolumeSpec.Mounts, mount)
+	}
+	*values = vals
+	//Now we need to normalize the names
+	//newdata := append(m[k8sR.GetKind()], seperator...)
+	//data = append(newdata, data...)
+	//m[k8sR.GetKind()] = data
+	return nil
+}
+
 // Convert the object list in the openshift template to a set of template files in the chart
 func objectToTemplate(objects *[]runtime.RawExtension, templateLabels *map[string]string, templates *[]*chart.File,
 	values *Values) error {
@@ -206,11 +253,11 @@ func objectToTemplate(objects *[]runtime.RawExtension, templateLabels *map[strin
 					vals.Configs.Configmaps = append(vals.Configs.Configmaps, envFrom.ConfigMapRef.Name)
 				}
 			}
+			err := getVolumeVal(&deploy.Spec.Template.Spec.Containers[0], &vals, &deploy.Spec.Template.Spec.Volumes)
+			if err != nil {
+				return fmt.Errorf("unable to convert to deploy: %w", err)
+			}
 		}
-		log.Println("configs %v", vals.Configs)
-		/* Generating volumes */
-
-		//	vals.VolumeSpec.Mounts
 
 		if k8sR.GetKind() == "Service" {
 			var svc = &core.Service{}

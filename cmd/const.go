@@ -42,7 +42,7 @@ var (
 	}
 )
 
-type Mounts struct {
+type Mount struct {
 	Name        string   `json:"name,omitempty"`
 	Ttype       string   `json:"type,omitempty"`
 	MountPath   string   `json:"mountPath,omitempty"`
@@ -50,8 +50,8 @@ type Mounts struct {
 	DefaultMode string   `json:"defaultMode,omitempty"`
 }
 type VolumeSpec struct {
-	Enabled bool     `json:"enabled,omitempty"`
-	Mounts  []Mounts `json:"mounts,omitempty"`
+	Enabled bool    `json:"enabled,omitempty"`
+	Mounts  []Mount `json:"mounts,omitempty"`
 }
 type Controller struct {
 	Enabled bool   `json:"enabled,omitempty"`
