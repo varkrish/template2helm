@@ -26,17 +26,28 @@ import (
 )
 
 const (
-	tplPathDefault   = "."
-	tplPathUsage     = "Path to an OpenShift Template, relative or absolute"
-	chartPathDefault = "."
-	chartPathUsage   = "Destination directory of the Chart."
+	tplPathDefault                    = "."
+	tplPathUsage                      = "Path to an OpenShift Template, relative or absolute"
+	chartPathDefault                  = "."
+	chartPathUsage                    = "Destination directory of the Chart."
+	helmRepoPathDefault               = "https://pages.github.com"
+	helmRepoPathUsage                 = "Helm common repository URL to add as dependency"
+	helmRepoChartDependencyVerDefault = ">=1.1.0"
+	helmRepoChatDependencyVerUsage    = "Provide the parent chart's version ex: 1.0.0"
+	imageRegistryDefault              = "quay.io"
+	imageRegistryUsage                = "Image Repository URL to be set in the chart for app images "
+	helmCommonChartNameDefault        = "app-helm-common"
+	helmCommChartNameUsage            = "Name of the dependent common chart. Default is " + helmCommonChartNameDefault
 )
 
 var (
-	tplPath   string
-	chartPath string
-
-	convertCmd = &cobra.Command{
+	tplPath          string
+	chartPath        string
+	helmCommonUrl    string
+	imageRepoBaseUrl string
+	helmCommChartVer string
+	helmCommonName   string
+	convertCmd       = &cobra.Command{
 		Use:   "convert",
 		Short: "Given the path to an OpenShift template file, spit out a Helm chart.",
 		Long:  `Long version...`,
@@ -69,14 +80,14 @@ var (
 			/* In our case, we  need to create the values.yaml, chart.yaml nad basic deployer*/
 			var dependency chart.Dependency
 			dependency = chart.Dependency{
-				Name:       "app-helm-common",
-				Version:    ">=1.0.0",
-				Repository: "",
+				Name:       helmCommonName,
+				Version:    helmCommChartVer,
+				Repository: helmCommonUrl,
 			}
 			myChart := chart.Chart{
 				Metadata: &chart.Metadata{
 					Name:        myTemplate.ObjectMeta.Name,
-					Version:     "v0.0.1",
+					Version:     "1.0.0",
 					Description: myTemplate.ObjectMeta.Annotations["description"],
 					//Tags:        myTemplate.ObjectMeta.Annotations["tags"],
 					Type:       "application",
@@ -104,6 +115,10 @@ var (
 func init() {
 	convertCmd.Flags().StringVarP(&tplPath, "template", "t", tplPathDefault, tplPathUsage)
 	convertCmd.Flags().StringVarP(&chartPath, "chart", "c", chartPathDefault, chartPathUsage)
+	convertCmd.Flags().StringVarP(&helmCommonName, "commonchartname", "n", helmCommonChartNameDefault, helmCommChartNameUsage)
+
+	convertCmd.Flags().StringVarP(&helmCommonUrl, "helmrepo", "r", helmRepoPathDefault, helmRepoPathUsage)
+	convertCmd.Flags().StringVarP(&helmCommChartVer, "helmdepver", "d", helmRepoChartDependencyVerDefault, helmRepoChatDependencyVerUsage)
 	rootCmd.AddCommand(convertCmd)
 }
 
@@ -170,9 +185,9 @@ func objectToTemplate(objects *[]runtime.RawExtension, templateLabels *map[strin
 	vals.Hpa.Enabled = true
 	vals.Hpa.Maxreplicas = 2
 	vals.Hpa.Targetcpuutilizationpercentage = 80
-	vals.Image.Repository = string(" ")
+	vals.Image.Repository = imageRepoBaseUrl
 	vals.Image.Tag = string(" ")
-	vals.Image.Namespace = ""
+	//vals.Image.Namespace = ""
 	vals.Pdb.Enabled = true
 	vals.Pdb.Minavailable = 1
 	vals.Strategy.Ttype = "RollingUpdate"
