@@ -80,22 +80,22 @@ type probes struct {
 	Readiness *core.Probe `json:"readiness,omitempty"`
 }
 type Route struct {
-	Enabled     bool              `json:"enabled,omitempty"`
+	Enabled     bool              `json:"enabled"`
 	Hostname    string            `json:"hostname,omitempty"`
 	Annotations map[string]string `json:"annotations,omitempty"`
-	TLSConfig   route.TLSConfig   `json:"termination"`
+	TLSConfig   route.TLSConfig   `json:"termination,omitempty"`
 }
 type Service struct {
-	Enabled     bool              `json:"enabled,omitempty"`
-	Svc_type    string            `json:"type,omitempty"`
-	Ports       []string          `json:"ports,omitempty"`
+	Enabled     bool              `json:"enabled"`
+	Svc_type    string            `json:"type"`
+	Ports       []string          `json:"ports"`
 	Annotations map[string]string `json:"annotations,omitempty"`
 }
 type ImageSpec struct {
-	Repository string          `json:"repository,omitempty"`
+	Repository string          `json:"repository"`
 	Namespace  string          `json:"namespace,omitempty"`
-	Name       string          `json:"name,omitempty"`
-	Tag        string          `json:"tag,omitempty"`
+	Name       string          `json:"name"`
+	Tag        string          `json:"tag"`
 	PullPolicy core.PullPolicy `json:"pullPolicy,omitempty"`
 }
 type SAOpts struct {
@@ -113,7 +113,7 @@ type Values struct {
 	Replicacount          int                       `json:"replicacount,omitempty"`
 	Env                   []core.EnvVar             `json:"env,omitempty"`
 	Image                 ImageSpec                 `json:"image,omitempty"`
-	Service               Service                   `json:"service,omitempty"`
+	Service               Service                   `json:"service"`
 	ServiceAccountOptions SAOpts                    `json:"serviceAccount,omitempty"`
 	Resources             core.ResourceRequirements `json:"resources,omitempty"`
 	Probes                probes                    `json:"probes,omitempty"`
